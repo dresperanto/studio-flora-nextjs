@@ -32,14 +32,14 @@ export class OrderService {
       deliveryTime: formData.deliveryTime,
       recipient: formData.deliveryType === 'delivery' ? {
         name: formData.recipientName || '',
-        address: formData.recipientAddress || '',
+        address: this.combineAddress(formData.recipientAddress, formData.recipientCity, formData.recipientZip),
         phone: formData.recipientPhone || ''
       } : undefined,
-      deliveryFee: this.calculateDeliveryFee(formData.deliveryType, formData.recipientAddress),
+      deliveryFee: this.calculateDeliveryFee(formData.deliveryType, this.combineAddress(formData.recipientAddress, formData.recipientCity, formData.recipientZip)),
       cardMessage: formData.cardMessage || '',
       paymentType: formData.paymentType,
       status: 'pending',
-      totalAmount: parseFloat(formData.budget) + this.calculateDeliveryFee(formData.deliveryType, formData.recipientAddress),
+      totalAmount: parseFloat(formData.budget) + this.calculateDeliveryFee(formData.deliveryType, this.combineAddress(formData.recipientAddress, formData.recipientCity, formData.recipientZip)),
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -65,6 +65,17 @@ export class OrderService {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1000);
     return `SF-${timestamp}-${random}`;
+  }
+
+  // Helper method to safely combine address fields
+  private static combineAddress(address?: string, city?: string, zip?: string): string {
+    const parts = [
+      address?.trim() || '',
+      city?.trim() || '',
+      zip?.trim() || ''
+    ].filter(part => part.length > 0);
+    
+    return parts.join(' ').trim();
   }
 
   // Get orders (server-side)
@@ -160,6 +171,8 @@ export class OrderService {
     if (formData.deliveryType === 'delivery') {
       if (!formData.recipientName?.trim()) errors.push('Recipient name is required for delivery');
       if (!formData.recipientAddress?.trim()) errors.push('Recipient address is required for delivery');
+      if (formData.recipientCity !== undefined && !formData.recipientCity?.trim()) errors.push('City is required for delivery');
+      if (formData.recipientZip !== undefined && !formData.recipientZip?.trim()) errors.push('Zip code is required for delivery');
       if (!formData.recipientPhone?.trim()) errors.push('Recipient phone is required for delivery');
     }
 

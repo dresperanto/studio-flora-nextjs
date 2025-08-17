@@ -18,7 +18,7 @@ const orderSchema = yup.object({
   orderDate: yup.string().required('Order date is required'),
   pickupDeliveryDate: yup.string().required('Pickup/delivery date is required'),
   occasion: yup.string().required('Occasion is required'),
-  budget: yup.string().required('Budget is required'),
+  budget: yup.string().oneOf(['50', '100', '150', '200', '250'], 'Please select a budget option').required('Budget is required'),
   deliveryType: yup.mixed<'pickup' | 'delivery'>().oneOf(['pickup', 'delivery']).required('Delivery type is required'),
   deliveryTime: yup.string().required('Time preference is required'),
   paymentType: yup.string().required('Payment type is required'),
@@ -37,12 +37,39 @@ const orderSchema = yup.object({
     then: (schema) => schema.required('Recipient address is required for delivery'),
     otherwise: (schema) => schema.defined()
   }),
+  recipientCity: yup.string().when('deliveryType', {
+    is: 'delivery',
+    then: (schema) => schema.required('City is required for delivery'),
+    otherwise: (schema) => schema.defined()
+  }),
+  recipientZip: yup.string().when('deliveryType', {
+    is: 'delivery',
+    then: (schema) => schema.required('Zip code is required for delivery'),
+    otherwise: (schema) => schema.defined()
+  }),
   recipientPhone: yup.string().when('deliveryType', {
     is: 'delivery',
     then: (schema) => schema.required('Recipient phone is required for delivery'),
     otherwise: (schema) => schema.defined()
   })
 });
+
+// FormField component moved outside to prevent re-renders and focus loss
+const FormField: React.FC<{ label: string; error?: string; required?: boolean; className?: string; children: React.ReactNode }> = ({ 
+  label, 
+  error, 
+  required,
+  className,
+  children 
+}) => (
+  <div className={`space-y-2 ${className || ''}`}>
+    <label className="block text-sm font-medium text-sf-gray-700 mb-2">
+      {label} {required && <span className="text-red-500">*</span>}
+    </label>
+    {children}
+    {error && <p className="text-sm text-red-600">{error}</p>}
+  </div>
+);
 
 const OrderForm: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,7 +86,7 @@ const OrderForm: React.FC = () => {
     defaultValues: {
       orderDate: new Date().toISOString().split('T')[0],
       deliveryType: 'pickup' as const,
-      budget: '',
+      budget: undefined,
       freshArrangementVase: '',
       cutFlowersWrapped: '',
       dishGardenPlanters: '',
@@ -67,19 +94,24 @@ const OrderForm: React.FC = () => {
       cardMessage: '',
       recipientName: '',
       recipientAddress: '',
+      recipientCity: '',
+      recipientZip: '',
       recipientPhone: ''
     }
   });
 
   const watchDeliveryType = watch('deliveryType');
   const watchRecipientAddress = watch('recipientAddress');
+  const watchRecipientCity = watch('recipientCity');
+  const watchRecipientZip = watch('recipientZip');
   const watchBudget = watch('budget') || '';
 
   // Update delivery fee when delivery type or address changes
   React.useEffect(() => {
-    const fee = OrderApiService.calculateDeliveryFee(watchDeliveryType, watchRecipientAddress);
+    const fullAddress = `${watchRecipientAddress || ''} ${watchRecipientCity || ''} ${watchRecipientZip || ''}`.trim();
+    const fee = OrderApiService.calculateDeliveryFee(watchDeliveryType, fullAddress);
     setDeliveryFee(fee);
-  }, [watchDeliveryType, watchRecipientAddress]);
+  }, [watchDeliveryType, watchRecipientAddress, watchRecipientCity, watchRecipientZip]);
 
   const onSubmit = async (data: OrderFormData) => {
     setIsSubmitting(true);
@@ -136,21 +168,6 @@ const OrderForm: React.FC = () => {
     }
   };
 
-  const FormField: React.FC<{ label: string; error?: string; required?: boolean; className?: string; children: React.ReactNode }> = ({ 
-    label, 
-    error, 
-    required,
-    className,
-    children 
-  }) => (
-    <div className={`space-y-2 ${className || ''}`}>
-      <label className="block text-sm font-medium text-sf-gray-700 mb-2">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      {children}
-      {error && <p className="text-sm text-red-600">{error}</p>}
-    </div>
-  );
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -256,14 +273,17 @@ const OrderForm: React.FC = () => {
               </FormField>
               
               <FormField label="Budget ($)" error={errors.budget?.message} required>
-                <input
+                <select
                   {...register('budget')}
                   className="w-full px-4 py-3 border-2 border-sf-gray-200 rounded-lg font-secondary text-base text-sf-gray-700 bg-white transition-colors focus:outline-none focus:border-sf-green-primary focus:shadow-sm focus:shadow-sf-green-primary/10"
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  placeholder="50.00"
-                />
+                >
+                  <option value="">Select your budget</option>
+                  <option value="50">$50</option>
+                  <option value="100">$100</option>
+                  <option value="150">$150</option>
+                  <option value="200">$200</option>
+                  <option value="250">$250+</option>
+                </select>
               </FormField>
             </div>
 
@@ -360,15 +380,33 @@ const OrderForm: React.FC = () => {
                   </FormField>
                   
                   <div className="md:col-span-2">
-                    <FormField label="Delivery Address" error={errors.recipientAddress?.message} required>
-                      <textarea
+                    <FormField label="Address" error={errors.recipientAddress?.message} required>
+                      <input
                         {...register('recipientAddress')}
-                        className="w-full px-4 py-3 border-2 border-sf-gray-200 rounded-lg font-secondary text-base text-sf-gray-700 bg-white transition-colors focus:outline-none focus:border-sf-green-primary focus:shadow-sm focus:shadow-sf-green-primary/10 resize-none"
-                        rows={3}
-                        placeholder="Full delivery address including street, city, state, and zip code"
+                        className="w-full px-4 py-3 border-2 border-sf-gray-200 rounded-lg font-secondary text-base text-sf-gray-700 bg-white transition-colors focus:outline-none focus:border-sf-green-primary focus:shadow-sm focus:shadow-sf-green-primary/10"
+                        placeholder="Street address"
+                        type="text"
                       />
                     </FormField>
                   </div>
+                  
+                  <FormField label="City" error={errors.recipientCity?.message} required>
+                    <input
+                      {...register('recipientCity')}
+                      className="w-full px-4 py-3 border-2 border-sf-gray-200 rounded-lg font-secondary text-base text-sf-gray-700 bg-white transition-colors focus:outline-none focus:border-sf-green-primary focus:shadow-sm focus:shadow-sf-green-primary/10"
+                      placeholder="City"
+                      type="text"
+                    />
+                  </FormField>
+                  
+                  <FormField label="Zip Code" error={errors.recipientZip?.message} required>
+                    <input
+                      {...register('recipientZip')}
+                      className="w-full px-4 py-3 border-2 border-sf-gray-200 rounded-lg font-secondary text-base text-sf-gray-700 bg-white transition-colors focus:outline-none focus:border-sf-green-primary focus:shadow-sm focus:shadow-sf-green-primary/10"
+                      placeholder="Zip code"
+                      type="text"
+                    />
+                  </FormField>
                 </div>
               </div>
             )}

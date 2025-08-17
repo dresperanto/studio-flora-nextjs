@@ -65,6 +65,8 @@ export interface OrderFormData {
   // Recipient Information (for delivery)
   recipientName?: string;
   recipientAddress?: string;
+  recipientCity?: string;
+  recipientZip?: string;
   recipientPhone?: string;
 
   // Additional Details
